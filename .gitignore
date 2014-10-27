@@ -64,4 +64,10 @@ com_crashlytics_export_strings.xml
 *.un~
 Session.vim
 .netrwhist
-*~
+./src/kma_dummy
+./src/kma_rm
+./src/kma_p2fl
+./src/kma_mck2
+./src/kma_bud
+./src/kma_lzbud
+./src/kma_competition
