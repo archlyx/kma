@@ -50,7 +50,7 @@
  *  variables should be in all lower case. When initializing
  *  structures and arrays, line everything up in neat columns.
  */
-#define MINBUFSIZE 16
+#define MINBUFSIZE 64
 #define NUMBEROFBUF PAGESIZE / MINBUFSIZE
 
 #define LEFT_CHILD(n) ((n) * 2 + 1)
