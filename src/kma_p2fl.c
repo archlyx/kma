@@ -89,6 +89,47 @@ kma_malloc(kma_size_t size)
   return NULL;
 }
 
+void
+init_buffer_list(void)
+{
+  kma_page_t* page = get_page();
+  buffer_list = page->ptr;
+
+  int offset = sizeof(buffer_t);
+
+  buffer_list->next_buffer = page->ptr + offset;
+  buffer_list->page = page;
+  buffer_list->size = 0;
+
+  buffer_t* current = buffer_list;
+  offset += sizeof(buffer_t);
+  int size = MINBLOCKSIZE;
+  while (size <= PAGESIZE)
+  {
+    current->next_size = page->ptr + offset;
+    current = current->next_size;
+    current->next_buffer = NULL;
+    current->size = size;
+    current->page = page;
+    size *= 2;
+    offset += sizeof(buffer_t);
+  }
+  current->next_size = NULL;
+}
+
+kma_size_t
+choose_block_size(kma_size_t size)
+{
+  int test_size = MINBLOCKSIZE;
+  while(test_size <= PAGESIZE)
+  {
+    if (test_size >= (size + sizeof(buffer_t)))
+      return test_size;
+    test_size *= 2;
+  }
+  return -1;
+}
+
 void*
 alloc_block(kma_size_t block_size)
 {
@@ -108,47 +149,6 @@ alloc_block(kma_size_t block_size)
   buf->next_buffer = top;
 
   return ((void*)buf + sizeof(buffer_t));
-}
-
-kma_size_t
-choose_block_size(kma_size_t size)
-{
-  int test_size = MINBLOCKSIZE;
-  while(test_size <= PAGESIZE)
-  {
-    if (test_size >= (size + sizeof(buffer_t)))
-      return test_size;
-    test_size *= 2;
-  }
-  return -1;
-}
-
-void
-init_buffer_list(void)
-{
-  kma_page_t* page = get_page();
-  buffer_list = page->ptr;
-
-  int offset = sizeof(buffer_t);
-
-  buffer_list->next_buffer = page->ptr + offset;
-  buffer_list->page = page;
-  buffer_list->size = 0;
-
-  buffer_t* current = buffer_list;
-  offset += sizeof(buffer_t);
-  int size = MINBLOCKSIZE;
-  while(size <= PAGESIZE)
-  {
-    current->next_size = page->ptr + offset;
-    current = current->next_size;
-    current->next_buffer = NULL;
-    current->size = size;
-    current->page = page;
-    size *= 2;
-    offset += sizeof(buffer_t);
-  }
-  current->next_size = NULL;
 }
 
 buffer_t* make_buffers(kma_size_t size)
@@ -179,6 +179,7 @@ buffer_t* make_buffers(kma_size_t size)
   top->next_buffer = NULL;
   return (buffer_t *) page->ptr;
 }
+
 void
 kma_free(void* ptr, kma_size_t size)
 {
