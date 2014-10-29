@@ -38,6 +38,7 @@
 /************System include***********************************************/
 #include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -51,25 +52,25 @@
  */
 #define MINBUFSIZE 32;
 
-typedef struct
+typedef struct buffer_t
 {
-  unsigned int page_counter;
-  kma_page_t* page;
-  struct free_list_t* free_lists;
-} global_header_t;
+  kma_page_t* page; 
+  struct buffer_t* next_buffer;
+} buffer_header_t;
 
-typedef struct
+typedef struct free_t
 {
   kma_size_t size;
-  struct free_list_t* next_list;
-  struct buffer_header_t* first_buffer;
+  struct free_t* next_list;
+  buffer_header_t* first_buffer;
 } free_list_t;
 
 typedef struct
 {
-  kma_page_t* page; 
-  struct buffer_header_t* next_buffer;
-} buffer_header_t;
+  unsigned int page_counter;
+  kma_page_t* page;
+  free_list_t* free_lists;
+} global_header_t;
 
 /************Global Variables*********************************************/
 global_header_t* global_header = NULL;
@@ -111,7 +112,7 @@ init_free_lists()
   current_list = global_header->free_lists;
   while (size <= PAGESIZE)
   {
-    current_list->next_buffer = NULL;
+    current_list->first_buffer = NULL;
     current_list->next_list = (free_list_t*)(page->ptr + offset);
     current_list->size = size;
 
@@ -181,7 +182,7 @@ select_buffer_size(kma_size_t size)
 void*
 find_buffer(kma_size_t buffer_size)
 {
-  free_list_t* current_list = global_header->freelists;
+  free_list_t* current_list = global_header->free_lists;
   buffer_header_t* current_buffer;
 
   /* Traverse the free lists to find the one with proper size */
@@ -217,7 +218,7 @@ kma_free(void* ptr, kma_size_t size)
   buffer_header_t* buffer = ptr - sizeof(buffer_header_t);
 
   /* Get the header of the corresponding free list */
-  free_list_t* free_list = buffer->next_buffer;
+  free_list_t* free_list = (free_list_t*)(buffer->next_buffer);
 
   /* Add the buffer to the beginning of the free list */
   buffer->next_buffer = free_list->first_buffer;
@@ -232,7 +233,7 @@ kma_free(void* ptr, kma_size_t size)
   if (global_header->page_counter == 1)
   {
     free_page(global_header->page);
-    free_lists = NULL;
+    global_header = NULL;
   }
 }
 
