@@ -189,9 +189,9 @@ main(int argc, char* argv[])
       stat = page_stats();
       int totalBytes = stat->num_in_use * stat->page_size;
 
-      
+
 #ifdef COMPETITION
-      if(req_id < n_req && n_alloc != n_dealloc)
+    if(req_id < n_req && n_alloc != n_dealloc)
 	{
 	  // We can calculate the ratio of wasted to used memory here.
 

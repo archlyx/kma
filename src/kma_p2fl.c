@@ -49,31 +49,96 @@
  *  variables should be in all lower case. When initializing
  *  structures and arrays, line everything up in neat columns.
  */
+#define MINBUFSIZE 32;
 
-typedef struct bufferT
+typedef struct
 {
   kma_size_t size;
-  struct bufferT* next_size;
-  struct bufferT* next_buffer;
+  struct global_header_t* next_size;
+  struct buffer_header_t* first_buffer;
+} global_header_t;
+
+typedef struct
+{
   kma_page_t* page; 
-} buffer_t;
+  struct buffer_header_t* next_buffer;
+} buffer_header_t;
 
 /************Global Variables*********************************************/
-static buffer_t* buffer_list = NULL;
-const int MINBLOCKSIZE = 32;
+global_header_t* free_lists = NULL;
 
 /************Function Prototypes******************************************/
-kma_size_t choose_block_size(kma_size_t);
-void remove_buffer_list(void);
-void init_buffer_list(void);
-void* alloc_block(kma_size_t);
-buffer_t* make_buffers(kma_size_t);
-int last_buf(buffer_t* size_buf, kma_page_t* page);
-void free_page_from_header(buffer_t* size_buf, kma_page_t* page);
+void init_free_lists();
+buffer_header_t* build_free_list(kma_size_t);
+
+kma_size_t select_buffer_size(kma_size_t);
+void* find_buffer(kma_size_t);
+
+void remove_free_lists();
+void remove_page(buffer_header_t* buffer, kma_page_t* page);
+unsigned int is_last_buffer(buffer_header_t* buffer, kma_page_t* page);
 
 /************External Declaration*****************************************/
 
 /**************Implementation***********************************************/
+
+void
+init_free_lists()
+{
+  unsigned int size = MINBUFSIZE;
+  unsigned int offset = sizeof(global_header_t);
+
+  global_header_t* current_list;
+
+  /* Request a page for managing the freelists globally */
+  kma_page_t* page = get_page();
+
+  /* Fill in the first free list */
+  free_lists = (global_header_t*)(page->ptr);
+
+  /* Fill in the header for the free lists in each size */
+  current_list = free_lists;
+  while (size <= PAGESIZE)
+  {
+    current_list->next_buffer = NULL;
+    current_list->next_size = (global_header_t*)(page->ptr + offset);
+    current_list->size = size;
+
+    current_list = current_list->next_size;
+    offset = offset + sizeof(global_header_t);
+    size = size * 2;
+  }
+  current_list->next_size = NULL;
+}
+
+buffer_header_t*
+build_free_list(kma_size_t size)
+{
+  kma_page_t* page = get_page();
+  if (page == NULL) return NULL;
+
+  buffer_list->next_buffer->size++;
+  buffer_t* top = page->ptr;
+
+  top->next_size = NULL;
+  top->size = size;
+  top->page = page;
+  int offset = size;
+  buffer_t* current;
+
+  while (offset < PAGESIZE)
+  {
+    current = page->ptr + offset;
+    top->next_buffer = current;
+    top = current;
+    offset += size;
+    current->next_size = NULL;
+    current->size = size;
+    current->page = page;
+  }
+  top->next_buffer = NULL;
+  return (buffer_t *) page->ptr;
+}
 
 void*
 kma_malloc(kma_size_t size)
@@ -113,8 +178,8 @@ alloc_block(kma_size_t block_size)
 kma_size_t
 choose_block_size(kma_size_t size)
 {
-  int test_size = MINBLOCKSIZE;
-  while(test_size <= PAGESIZE)
+  int test_size = MINBUFSIZE;
+  while (test_size <= PAGESIZE)
   {
     if (test_size >= (size + sizeof(buffer_t)))
       return test_size;
@@ -123,62 +188,6 @@ choose_block_size(kma_size_t size)
   return -1;
 }
 
-void
-init_buffer_list(void)
-{
-  kma_page_t* page = get_page();
-  buffer_list = page->ptr;
-
-  int offset = sizeof(buffer_t);
-
-  buffer_list->next_buffer = page->ptr + offset;
-  buffer_list->page = page;
-  buffer_list->size = 0;
-
-  buffer_t* current = buffer_list;
-  offset += sizeof(buffer_t);
-  int size = MINBLOCKSIZE;
-  while(size <= PAGESIZE)
-  {
-    current->next_size = page->ptr + offset;
-    current = current->next_size;
-    current->next_buffer = NULL;
-    current->size = size;
-    current->page = page;
-    size *= 2;
-    offset += sizeof(buffer_t);
-  }
-  current->next_size = NULL;
-}
-
-buffer_t* make_buffers(kma_size_t size)
-{
-  kma_page_t* page = get_page();
-  if(page == NULL)
-      return NULL;
-
-  buffer_list->next_buffer->size++;
-  buffer_t* top = page->ptr;
-
-  top->next_size = NULL;
-  top->size = size;
-  top->page = page;
-  int offset = size;
-  buffer_t* current;
-
-  while(offset < PAGESIZE)
-  {
-    current = page->ptr + offset;
-    top->next_buffer = current;
-    top = current;
-    offset += size;
-    current->next_size = NULL;
-    current->size = size;
-    current->page = page;
-  }
-  top->next_buffer = NULL;
-  return (buffer_t *) page->ptr;
-}
 void
 kma_free(void* ptr, kma_size_t size)
 {
@@ -203,6 +212,7 @@ kma_free(void* ptr, kma_size_t size)
       //remove the buffer list
       remove_buffer_list();
 }
+
 int last_buf(buffer_t* size_header, kma_page_t* page)
 {
   buffer_t* buf = size_header->next_buffer;
