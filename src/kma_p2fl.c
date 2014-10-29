@@ -61,7 +61,7 @@ typedef struct
 typedef struct
 {
   kma_size_t size;
-  struct global_header_t* next_size;
+  struct free_list_t* next_list;
   struct buffer_header_t* first_buffer;
 } free_list_t;
 
@@ -81,8 +81,8 @@ buffer_header_t* build_free_list(kma_size_t);
 kma_size_t select_buffer_size(kma_size_t);
 void* find_buffer(kma_size_t);
 
-void remove_page(buffer_header_t* buffer, kma_page_t* page);
-unsigned int is_last_buffer(buffer_header_t* buffer, kma_page_t* page);
+void remove_page(free_list_t*, kma_page_t*);
+unsigned int is_last_buffer(free_list_t*, kma_page_t*);
 
 /************External Declaration*****************************************/
 
@@ -100,21 +100,26 @@ init_free_lists()
   kma_page_t* page = get_page();
 
   /* Fill in the first free list */
-  free_lists = global_header->free_lists;
+  global_header = (global_header_t*)(page->ptr);
+  global_header->page_counter = 1;
+  global_header->page = page;
+
+  global_header->free_lists = (free_list_t*)(page->ptr + offset);
+  offset = offset + sizeof(free_list_t);
 
   /* Fill in the header for the free lists in each size */
-  current_list = free_lists;
+  current_list = global_header->free_lists;
   while (size <= PAGESIZE)
   {
     current_list->next_buffer = NULL;
-    current_list->next_size = (global_header_t*)(page->ptr + offset);
+    current_list->next_list = (free_list_t*)(page->ptr + offset);
     current_list->size = size;
 
-    current_list = current_list->next_size;
-    offset = offset + sizeof(global_header_t);
+    current_list = current_list->next_list;
+    offset = offset + sizeof(free_list_t);
     size = size * 2;
   }
-  current_list->next_size = NULL;
+  current_list->next_list = NULL;
 }
 
 buffer_header_t*
@@ -124,6 +129,7 @@ build_free_list(kma_size_t size)
 
   kma_page_t* page = get_page();
   if (page == NULL) return NULL;
+  (global_header->page_counter)++;
 
   buffer_header_t* current_buffer = page->ptr;
 
@@ -144,7 +150,7 @@ kma_malloc(kma_size_t size)
   kma_size_t buffer_size;
 
   /* If there is no free lists available, initialize them */
-  if (free_lists == NULL)
+  if (global_header == NULL)
     init_free_lists();
   
   /* Select the proper size for the request size */
@@ -175,12 +181,12 @@ select_buffer_size(kma_size_t size)
 void*
 find_buffer(kma_size_t buffer_size)
 {
-  global_header_t* current_list = free_lists;
+  free_list_t* current_list = global_header->freelists;
   buffer_header_t* current_buffer;
 
   /* Traverse the free lists to find the one with proper size */
   while (current_list->size != buffer_size)
-    current_list = current_list->next_size;
+    current_list = current_list->next_list;
 
   /* In the proper free list, check if there is free buffer */
   current_buffer = (buffer_header_t*)(current_list->first_buffer);
@@ -199,7 +205,7 @@ find_buffer(kma_size_t buffer_size)
 
   /* Reconnect the next_buffer to the free list such that
    * it can be freed later easily */
-  current_buffer->next_buffer = current_list;
+  current_buffer->next_buffer = (buffer_header_t*)current_list;
 
   return (current_buffer + sizeof(buffer_header_t));
 }
@@ -211,7 +217,7 @@ kma_free(void* ptr, kma_size_t size)
   buffer_header_t* buffer = ptr - sizeof(buffer_header_t);
 
   /* Get the header of the corresponding free list */
-  global_header_t* free_list = buffer->next_buffer;
+  free_list_t* free_list = buffer->next_buffer;
 
   /* Add the buffer to the beginning of the free list */
   buffer->next_buffer = free_list->first_buffer;
@@ -223,15 +229,15 @@ kma_free(void* ptr, kma_size_t size)
     remove_page(free_list, buffer->page);
 
   /* Free the global header page if there is no used buffer */
-  if ()
+  if (global_header->page_counter == 1)
   {
-    free_page(free_lists->page);
+    free_page(global_header->page);
     free_lists = NULL;
   }
 }
 
 unsigned int
-is_last_buffer(global_header_t* free_list, kma_page_t* page)
+is_last_buffer(free_list_t* free_list, kma_page_t* page)
 {
   buffer_header_t* buffer = free_list->first_buffer;
 
@@ -252,11 +258,11 @@ is_last_buffer(global_header_t* free_list, kma_page_t* page)
 }
 
 void
-remove_page(global_header_t* free_list, kma_page_t* page)
+remove_page(free_list_t* free_list, kma_page_t* page)
 {
   unsigned int page_id = page->id;
   buffer_header_t* prev_buffer = NULL;
-  buffer_header_t* current_buffer = free_list -> first_buffer; 
+  buffer_header_t* current_buffer = free_list->first_buffer; 
 
   /* First we need to remove those free buffers in the free list */
   while (current_buffer)
@@ -281,7 +287,7 @@ remove_page(global_header_t* free_list, kma_page_t* page)
     current_buffer = current_buffer->next_buffer;
   }
 
-  buffer_list->next_buffer->size--;
+  (global_header->page_counter)--;
   free_page(page);
 }
 
