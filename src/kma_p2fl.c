@@ -55,6 +55,7 @@
 typedef struct buffer_t
 {
   kma_page_t* page; 
+  unsigned int used_space;
   struct buffer_t* next_buffer;
 } buffer_header_t;
 
@@ -123,28 +124,6 @@ init_free_lists()
   current_list->next_list = NULL;
 }
 
-buffer_header_t*
-build_free_list(kma_size_t size)
-{
-  unsigned int offset = size;
-
-  kma_page_t* page = get_page();
-  if (page == NULL) return NULL;
-  (global_header->page_counter)++;
-
-  buffer_header_t* current_buffer = page->ptr;
-
-  while (offset < PAGESIZE)
-  {
-    current_buffer->next_buffer = (buffer_header_t*)(page->ptr + offset);
-    current_buffer->page = page;
-
-    offset = offset + size;
-  }
-  current_buffer->next_buffer = NULL;
-  return (buffer_header_t*)(page->ptr);
-}
-
 void*
 kma_malloc(kma_size_t size)
 {
@@ -190,12 +169,12 @@ find_buffer(kma_size_t buffer_size)
     current_list = current_list->next_list;
 
   /* In the proper free list, check if there is free buffer */
-  current_buffer = (buffer_header_t*)(current_list->first_buffer);
+  current_buffer = current_list->first_buffer;
   if (current_buffer == NULL)
   {
     /* Build up the free lists if there is no free buffer */
     current_buffer = build_free_list(buffer_size);
-    
+
     if (current_buffer == NULL)
       return NULL;
   }
@@ -208,7 +187,37 @@ find_buffer(kma_size_t buffer_size)
    * it can be freed later easily */
   current_buffer->next_buffer = (buffer_header_t*)current_list;
 
-  return (current_buffer + sizeof(buffer_header_t));
+  ((buffer_header_t*)(current_buffer->page->ptr))->used_space += buffer_size; 
+  
+  return ((void*)current_buffer + sizeof(buffer_header_t));
+}
+
+buffer_header_t*
+build_free_list(kma_size_t size)
+{
+  unsigned int offset = size;
+
+  kma_page_t* page = get_page();
+  if (page == NULL) return NULL;
+  (global_header->page_counter)++;
+
+  buffer_header_t* current_buffer = page->ptr;
+
+  while (offset < PAGESIZE)
+  {
+    current_buffer->next_buffer = (buffer_header_t*)(page->ptr + offset);
+    current_buffer->used_space = 0;
+    current_buffer->page = page;
+
+    current_buffer = current_buffer->next_buffer;
+    offset = offset + size;
+  }
+  current_buffer->next_buffer = NULL;
+  current_buffer->used_space = 0;
+  current_buffer->page = page;
+
+  return (buffer_header_t*)(page->ptr);
+  /*return (buffer_header_t*)(page->ptr);*/
 }
 
 void
@@ -224,9 +233,12 @@ kma_free(void* ptr, kma_size_t size)
   buffer->next_buffer = free_list->first_buffer;
   free_list->first_buffer = buffer;
 
+  ((buffer_header_t*)(buffer->page->ptr))->used_space -= free_list->size; 
+
   /* If this is the last nonfree buffer in the page, we need 
    * to free the page after free the buffer */
-  if (is_last_buffer(free_list, buffer->page))
+  /*if (is_last_buffer(free_list, buffer->page))*/
+  if (((buffer_header_t*)(buffer->page->ptr))->used_space == 0)
     remove_page(free_list, buffer->page);
 
   /* Free the global header page if there is no used buffer */
@@ -268,21 +280,23 @@ remove_page(free_list_t* free_list, kma_page_t* page)
   /* First we need to remove those free buffers in the free list */
   while (current_buffer)
   {
-    if ((current_buffer->page->id == page_id) && (prev_buffer != NULL))
+    if (current_buffer->page->id == page_id)
     {
       /* In many cases there are several buffers in the same page connecting
        * continuously in the free list, thus we can remove them together */
-      while ((current_buffer->page->id == page_id) && (current_buffer != NULL))
+      while ((current_buffer->page->id == page_id))
+      {
         current_buffer = current_buffer->next_buffer;
+        if (current_buffer == NULL) break;
+      }
 
-      if (current_buffer)
+      if (prev_buffer)
         prev_buffer->next_buffer = current_buffer;
       else
-      {
-        /* Arrive at the end of the free list, break */
-        prev_buffer->next_buffer = NULL;
+        free_list->first_buffer = current_buffer;
+
+      if (current_buffer == NULL)
         break;
-      }
     }
     prev_buffer = current_buffer;
     current_buffer = current_buffer->next_buffer;

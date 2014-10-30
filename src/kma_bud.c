@@ -168,7 +168,7 @@ kma_malloc(kma_size_t size)
        * the requested mem, abandon the longest_length and only use
        * the prev, next and larger in the header */
       page_header->large = 1;
-      return page->ptr + 2 * sizeof(kma_page_t*) + sizeof(uint8_t);
+      return (void*)(page->ptr) + 2 * sizeof(kma_page_t*) + sizeof(uint8_t);
     }
   }
 
@@ -335,12 +335,14 @@ void
 remove_page(kma_page_t* page)
 {
   page_header_t* page_header = page->ptr;
-  kma_page_t* next_page = page_header->next_page;
   kma_page_t* prev_page = page_header->prev_page;
+  kma_page_t* next_page = page_header->next_page;
 
   /* Link the prev and next nodes together, and remove the page */
   if (prev_page != NULL)
     ((page_header_t*)(prev_page->ptr))->next_page = next_page;
+  else
+    first_page = next_page;
 
   if (next_page != NULL)
     ((page_header_t*)(next_page->ptr))->prev_page = prev_page;
