@@ -84,7 +84,6 @@ kma_size_t select_buffer_size(kma_size_t);
 void* find_buffer(kma_size_t);
 
 void remove_page(free_list_t*, kma_page_t*);
-unsigned int is_last_buffer(free_list_t*, kma_page_t*);
 
 /************External Declaration*****************************************/
 
@@ -247,27 +246,6 @@ kma_free(void* ptr, kma_size_t size)
     free_page(global_header->page);
     global_header = NULL;
   }
-}
-
-unsigned int
-is_last_buffer(free_list_t* free_list, kma_page_t* page)
-{
-  buffer_header_t* buffer = free_list->first_buffer;
-
-  unsigned int page_id = page->id;
-  unsigned int free_space = 0;
-
-  /* Sum up all of the available free buffer on the given page
-   * and test if it is equal to the page size */
-  while (buffer != NULL)
-  {
-    if (buffer->page->id == page_id)
-      free_space = free_space + free_list->size;
-
-    buffer = buffer->next_buffer;
-  }
-
-  return ((free_space == PAGESIZE) ? 1 : 0);
 }
 
 void
