@@ -37,6 +37,7 @@
 /************System include***********************************************/
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 /************Private include**********************************************/
 #include "kma_page.h"
@@ -49,9 +50,28 @@
  *  structures and arrays, line everything up in neat columns.
  */
 
+typedef struct buffer_t
+{
+  struct buffer_t* next_buffer;
+  struct buffer_t* prev_buffer;
+  kma_page_t* page;
+  uint16_t size;
+} buffer_header_t;
+
+typedef struct
+{
+  kma_page_t* next_page;
+  buffer_header_t* first_buffer;
+  unsigned int page_counter;
+} page_header_t;
+
 /************Global Variables*********************************************/
+page_header_t* first_page;
 
 /************Function Prototypes******************************************/
+void init_page_header(kma_page_t*);
+buffer_header_t* find_buffer(kma_size_t);
+void remove_page(kma_page_t*);
 
 /************External Declaration*****************************************/
 
@@ -60,7 +80,31 @@
 void*
 kma_malloc(kma_size_t size)
 {
-  return NULL;
+  kma_page_t* page;
+  buffer_header_t* buffer;
+  
+  if ((size + sizeof(page_header_t*)) > PAGESIZE)
+    return NULL;
+
+  if (first_page == NULL) {
+    page = get_page();
+    first_page = page;
+    init_page_header(page);
+  }
+
+  buffer = find_buffer(size);
+
+  return (void*)buffer + sizeof(buffer_header_t);
+}
+
+void
+init_page_header(kma_page_t* page)
+{
+  page_header_t* page_header = page->ptr;
+  page_header->next_page = NULL;
+  page_header->page_counter = 1;
+
+  page_header-> 
 }
 
 void
