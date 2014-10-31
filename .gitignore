@@ -64,6 +64,7 @@ com_crashlytics_export_strings.xml
 *.un~
 Session.vim
 
+*.tar.gz
 src/kma_dummy
 src/kma_rm
 src/kma_p2fl
@@ -71,3 +72,9 @@ src/kma_mck2
 src/kma_bud
 src/kma_lzbud
 src/kma_competition
+src/testsuite/kma_competition
+src/testsuite/KMA_RM
+src/testsuite/KMA_BUD
+src/testsuite/KMA_P2FL
+src/testsuite/KMA_MCK2
+src/testsuite/KMA_LZBUD
