@@ -1,6 +1,6 @@
-# EECS343 Opearting System #
+# Kernel Memory Allocator #
 
-Project #2, Kernel Memory Allocator
+Project #2, EECS343 Opearting System
 
 ## ALGORITHMS ##
 Here I have implemented **THREE** algorithms for the KMA, namely
